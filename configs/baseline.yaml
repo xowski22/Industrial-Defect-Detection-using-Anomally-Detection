@@ -1,0 +1,20 @@
+data:
+  root_dir: "/data/raw/mvtec_anomaly_detection"
+  category: "bottle"
+  img_size: 256
+
+model:
+  name: "patchcore"
+  backbone: "wide_resnet50_2"
+
+training:
+  batch_size: 32
+  num_workers: 4
+
+evaluation:
+  metrics: ["auroc", "pixel_auroc"]
+
+output:
+  experiment_dir: "experiments/baseline_bottle"
+  save_images: true
+    

@@ -1,10 +1,31 @@
+# Core
 torch
 torchvision
-anomalib
 numpy
-pandas
+pillow
+
+# Anomaly Detection
+anomalib
+
+# Data and Visualization
 matplotlib
-scikit-learn
-jupyter
-wandb
+seaborn
+pandas
+opencv-python
 streamlit
+
+# Metrics
+scikit-learn
+scikit-image
+
+# Experiment tracking
+wandb
+tensorboard
+
+# Notebooks
+jupyter
+ipywidgets
+
+# Utils
+pyyaml
+tqdm
