@@ -1,0 +1,10 @@
+torch
+torchvision
+anomalib
+numpy
+pandas
+matplotlib
+scikit-learn
+jupyter
+wandb
+streamlit
