@@ -210,3 +210,6 @@ data/raw/*
 data/processed/*
 *.zip
 *.tar.gz
+
+experiments/*
+!experiments/*.py
