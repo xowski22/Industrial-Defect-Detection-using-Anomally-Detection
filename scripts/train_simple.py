@@ -17,7 +17,8 @@ def train_ae(config: dict, exp_dir: Path):
         root_dir=Path(config['data']['root_dir']),
         category=config['data']['category'],
         split='train',
-        transform=img_transform
+        transform=img_transform,
+        mask_transform=mask_transforms
     )
 
     train_loader = DataLoader(
@@ -59,7 +60,7 @@ def train_ae(config: dict, exp_dir: Path):
 
         if (epoch + 1) % 10 == 0:
             checkpoint_path = exp_dir / "checkpoints" / f"ae_epoch_{epoch+1}.pth"
-            checkpoint_path.parent.mkdir(exist_ok=True)
+            checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
@@ -72,8 +73,9 @@ def train_ae(config: dict, exp_dir: Path):
 
     return model
 
-config = yaml.safe_load(open("configs/baseline.yaml"))
-exp_dir = Path("experiments/test_run")
-exp_dir.mkdir(parents=True, exist_ok=True)
+if __name__ == "__main__":
+    config = yaml.safe_load(open("configs/baseline.yaml"))
+    exp_dir = Path("experiments/test_run")
+    exp_dir.mkdir(parents=True, exist_ok=True)
 
-train_ae(config, exp_dir)
+    train_ae(config, exp_dir)

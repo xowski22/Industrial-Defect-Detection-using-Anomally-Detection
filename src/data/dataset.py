@@ -24,7 +24,8 @@ class MVTecDataset(Dataset):
 
     def __init__(self, 
                  root_dir: str, category: str, split: str = "train", 
-                 transform: Optional[transforms.Compose] = None, mask_transform: Optional[transforms.Compose] = None
+                 transform: Optional[transforms.Compose] = None, 
+                 mask_transform: Optional[transforms.Compose] = None
                 ):
         self.root_dir = Path(root_dir)
         self.category = category
@@ -82,15 +83,27 @@ class MVTecDataset(Dataset):
         """
         img = Image.open(self.image_paths[index]).convert("RGB")
 
-        mask = None
-        if self.mask_paths[index] is not None:
-            mask = Image.open(self.mask_paths[index]).convert("L")
-        
+        # Apply image transform
         if self.transform:
             img = self.transform(img)
         
-        if mask and self.mask_transform:
-            mask = self.mask_transform(mask)
+        # Handle mask - always return a tensor, even if empty
+        if self.mask_paths[index] is not None:
+            mask = Image.open(self.mask_paths[index]).convert("L")
+            if self.mask_transform:
+                mask = self.mask_transform(mask)
+            else:
+                # Fallback if no mask_transform provided
+                mask = transforms.ToTensor()(mask)
+        else:
+            # Create empty mask with same spatial dimensions as image
+            # Image shape after transform is [C, H, W]
+            if isinstance(img, torch.Tensor):
+                _, h, w = img.shape
+                mask = torch.zeros((1, h, w), dtype=torch.float32)
+            else:
+                # Fallback - should not happen if transform is applied
+                mask = torch.zeros((1, 256, 256), dtype=torch.float32)
         
         return {
             "image": img,
