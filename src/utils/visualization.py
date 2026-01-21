@@ -167,12 +167,12 @@ def create_summary(results: dict, category: str, save_path: Optional[Path] = Non
 Evaluation results: {category.upper()}
 
 Image-level Metrics:
-\tAUROC: {results['image_auroc']:.4f}
+\tAUROC: {results['image_AUROC']:.4f}
 \tF1 Score: {results['f1_score']:.4f}
 \tOptimal Threshold: {results['optimal_threshold']:.4f}
 
 Pixel-level Metrics:
-\tAUROC: {results.get('pixel_auroc', 'N/A')}
+\tAUROC: {results.get('pixel_AUROC', 'N/A')}
 """
     
     print(summary)
@@ -187,10 +187,10 @@ Pixel-level Metrics:
                 writer.writerow(['Category', 'Image_AUROC', 'F1_Score', 'Optimal_Threshold', 'Pixel_AUROC'])
             writer.writerow([
                 category,
-                f"{results['image_auroc']:.4f}",
+                f"{results['image_AUROC']:.4f}",
                 f"{results['f1_score']:.4f}",
                 f"{results['optimal_threshold']:.4f}",
-                f"{results.get('pixel_auroc', 'N/A')}"
+                f"{results.get('pixel_AUROC', 'N/A')}"
             ])
         print(f"Results summary saved to {csv_path}")
     return summary

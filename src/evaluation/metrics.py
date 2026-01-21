@@ -31,7 +31,7 @@ def compute_pixel_auroc(masks: np.ndarray, anomaly_maps: np.ndarray) -> float:
         Pixel-level AUROC
     """
 
-    masks_flat = masks.flatten()
+    masks_flat = (masks.flatten() > 0.5).astype(int)
     scores_flat = anomaly_maps.flatten()
 
     valid_mask = ~np.isnan(masks_flat)
