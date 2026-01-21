@@ -90,11 +90,12 @@ def train_patchcore(config: dict, exp_dir: Path):
 
     return results
 
-args = parser.parse_args()
-config = load_config(args.config)
-exp_dir = setup_experiment_dir(config)
+if __name__ == "__main__":
+    args = parser.parse_args()
+    config = load_config(args.config)
+    exp_dir = setup_experiment_dir(config)
 
-if config['model']['name'] == 'patchcore':
-    results = train_patchcore(config, exp_dir)
-else:
-    raise ValueError(f"Model {config['model']['name']} not implemented.")
+    if config['model']['name'] == 'patchcore':
+        results = train_patchcore(config, exp_dir)
+    else:
+        raise ValueError(f"Model {config['model']['name']} not implemented.")
