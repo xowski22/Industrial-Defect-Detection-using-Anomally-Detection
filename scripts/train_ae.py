@@ -18,7 +18,7 @@ from src.evaluation.metrics import eval_model, compute_anomaly_score
 
 def train_ae(config: dict, category: str, exp_dir: Path):
 
-    run = init_run("autoencoder", category, config=config)
+    init_run("autoencoder", category, config=config)
     
     img_transform, mask_transforms = get_default_transforms(config['data']['img_size'])
 
@@ -117,17 +117,17 @@ def train_ae(config: dict, category: str, exp_dir: Path):
             all_scores.extend(scores.cpu().numpy())
 
             if len(sample_imgs) < 8:
-                sample_imgs.extend(images.cpu())
-                sample_recons.extend(recon.cpu())
-                sample_maps.extend(amaps.cpu())
+                sample_imgs.append(images.cpu())
+                sample_recons.append(recon.cpu())
+                sample_maps.append(amaps.cpu())
                 sample_labels.extend(batch['label'].tolist())
                 sample_types.extend(batch['defect_type'])
 
     log_roc_curve(np.array(all_labels), np.array(all_scores), category)
 
     vis_imgs = torch.cat(sample_imgs)[:8]
-    vis_recons = torch.vcat(sample_recons)[:8]
-    vis_maps = torch.vcat(sample_maps)[:8]
+    vis_recons = torch.cat(sample_recons)[:8]
+    vis_maps = torch.cat(sample_maps)[:8]
 
     log_anomaly_vis(vis_imgs, vis_recons, vis_maps, sample_labels[:8], sample_types[:8], category)
 
@@ -152,4 +152,4 @@ if __name__ == "__main__":
     exp_dir = Path("experiments") / "ae" / category / datetime.now().strftime("%Y%m%d-%H%M%S")
     exp_dir.mkdir(parents=True, exist_ok=True)
 
-    train_ae(config, exp_dir)
+    train_ae(config, category, exp_dir)

@@ -213,3 +213,5 @@ data/processed/*
 
 experiments/*
 !experiments/*.py
+
+wandb

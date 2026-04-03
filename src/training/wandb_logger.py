@@ -40,7 +40,7 @@ def init_run(
             "category": category,
             **config,
         },
-        reinit=True
+        reinit="finish_previous"
     )
     return run
 
@@ -74,11 +74,11 @@ def log_roc_curve(
     """
     Logs ROC curve as a W&B plot for the given true labels and predicted scores.
     """
-    fpr, tpr = roc_curve(y_true, y_scores)
+    fpr, tpr, _ = roc_curve(y_true, y_scores)
     roc_auc = auc(fpr, tpr)
 
     fig, ax = plt.subplots(figsize=(7, 5))
-    ax.plot(fpr, tpr, lw=2, label=f'AUC = {roc_auc:.3f})')
+    ax.plot(fpr, tpr, lw=2, label=f'AUC = {roc_auc:.3f}')
     ax.plot([0, 1], [0, 1], '--', color='gray')
     ax.set_xlabel("FPR")
     ax.set_ylabel("TPR")
@@ -109,6 +109,13 @@ def log_anomaly_vis(
         img = (images[i].cpu() * std + mean).clamp(0, 1).permute(1, 2, 0).numpy()
         recon = (reconstructed[i].cpu() * std + mean).clamp(0, 1).permute(1, 2, 0).numpy()
         anomaly_map = anomaly_maps[i].cpu().numpy()
+
+        if anomaly_map.ndim == 3 and anomaly_map.shape[0] == 1:
+            anomaly_map = anomaly_map[0]
+        if anomaly_map.ndim != 2:
+            anomaly_map = np.squeeze(anomaly_map)
+        if anomaly_map.ndim != 2:
+            raise ValueError(f"Expected anomaly map with 2 dimensions, got shape {anomaly_map.shape}")
 
         norm_map = (anomaly_map - anomaly_map.min()) / (anomaly_map.max() - anomaly_map.min() + 1e-8)
         heatmap = plt.cm.jet(norm_map)[:, :, :3]  # Get RGB from colormap
