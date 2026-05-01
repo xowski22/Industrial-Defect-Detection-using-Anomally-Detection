@@ -119,15 +119,14 @@ def eval_model(model, dataloader, device, method="mse") -> Dict[str, float]:
             all_scores.extend(image_scores.cpu().numpy())
 
             for i, mask in enumerate(masks):
-                if labels[i] == 1:
-                    if isinstance(mask, torch.Tensor):
-                        mask_np = mask.squeeze().cpu().numpy()
-                    else:
-                        mask_np = np.array(mask).squeeze()
+                if isinstance(mask, torch.Tensor):
+                    mask_np = mask.squeeze().cpu().numpy()
+                else:
+                    mask_np = np.array(mask).squeeze()
                     
-                    if mask_np.sum() > 0:
-                        all_masks.append(mask_np)
-                        all_anomaly_maps.append(error_maps[i].cpu().numpy())
+                if mask_np.sum() > 0:
+                    all_masks.append(mask_np)
+                    all_anomaly_maps.append(error_maps[i].cpu().numpy())
     
     all_labels = np.array(all_labels)
     all_scores = np.array(all_scores)

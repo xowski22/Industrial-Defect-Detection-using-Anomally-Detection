@@ -43,7 +43,6 @@ class ConvAutoencoder(nn.Module):
             nn.ReLU(inplace=True),
             
             nn.ConvTranspose2d(32, 3, kernel_size=4, stride=2, padding=1),  # 3 x 256 x 256
-            nn.Sigmoid()  # Output w [0, 1]
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

@@ -215,3 +215,4 @@ experiments/*
 !experiments/*.py
 
 wandb
+results
