@@ -1,0 +1,22 @@
+data:
+  root_dir: "data/raw/mvtec_anomaly_detection"
+  category: "bottle"
+  img_size: 256
+
+model:
+  name: "autoencoder"
+  latent_dim: 128
+
+training:
+  batch_size: 16
+  num_workers: 4
+  learning_rate: 0.0001
+  num_epochs: 50
+
+evaluation:
+  metrics: ["auroc", "pixel_auroc"]
+  method: "mse"
+
+output:
+  experiment_dir: "experiments/autoencoder"
+  save_images: true

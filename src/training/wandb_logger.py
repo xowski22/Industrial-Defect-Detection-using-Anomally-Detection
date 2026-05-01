@@ -1,15 +1,14 @@
 import wandb
 import torch
-import matplotlib.pyplot as plt
 import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 matplotlib.use('Agg')  # Use a non-interactive backend for plotting
 
-from pathlib import Path
 from sklearn.metrics import roc_curve, auc
 from typing import Dict, Any, List
-from anomalib.loggers import AnomalibWandbLogger
-from anomalib.engine import Engine
+
+from src.utils.visualization import denormalize_img
 
 
 def init_run(
@@ -44,7 +43,7 @@ def init_run(
     )
     return run
 
-# AE helpels
+# AE helpers
 
 def log_ae_epoch(epoch: int, loss: float, lr: float):
     """Call once per trainig epoch to log the training loss and learning rate."""
@@ -99,15 +98,12 @@ def log_anomaly_vis(
     max_samples: int = 8
 ):
     """Logs a grid of original images, reconstructions, and anomaly maps to W&B."""
-    mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
-    std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
-
     n = min(len(images), max_samples)
     wandb_images = []
 
     for i in range(n):
-        img = (images[i].cpu() * std + mean).clamp(0, 1).permute(1, 2, 0).numpy()
-        recon = (reconstructed[i].cpu() * std + mean).clamp(0, 1).permute(1, 2, 0).numpy()
+        img = denormalize_img(images[i].cpu())
+        recon = denormalize_img(reconstructed[i].cpu())
         anomaly_map = anomaly_maps[i].cpu().numpy()
 
         if anomaly_map.ndim == 3 and anomaly_map.shape[0] == 1:
@@ -128,29 +124,3 @@ def log_anomaly_vis(
     wandb.log({f"visualizations/{category}": wandb_images})
     print(f"Logged {len(wandb_images)} anomaly visualization panels for category '{category}'")
 
-def init_anomalib_engine(exp_dir: Path, model_name: str, category: str, project: str="anomaly-detection-mvtec"):
-    """
-    Build an Anomalib Engine with a W&B logger
-    Logs anomaly maps, heatmaps, and evaluation images
-
-    Usage:
-
-    """
-
-    logger = AnomalibWandbLogger(
-        project=project,
-        name=f"{model_name}_{category}",
-        group=category,
-        tags=[model_name, category],
-        log_model=False # Set to True to log model checkpoints
-    )
-
-    engine = Engine(
-        max_epochs=1,
-        devices=1,
-        accelerator="auto",
-        default_root_dir=str(exp_dir),
-        logger=logger
-    )
-
-    return engine

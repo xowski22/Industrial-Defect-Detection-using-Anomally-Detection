@@ -14,7 +14,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from anomalib.data import MVTecAD
 from anomalib.models import Patchcore
-from src.training.wandb_logger import init_anomalib_engine
+from src.training.engine import build_anomalib_engine
 from scripts.train_ae import train_ae
 
 
@@ -35,7 +35,7 @@ def run_patchcore(config: dict, category: str, exp_dir: Path) -> dict:
         num_neighbors=9
     )
 
-    engine = init_anomalib_engine(exp_dir, "patchcore", category)
+    engine = build_anomalib_engine(exp_dir, "patchcore", category)
     engine.fit(model=model, datamodule=datamodule)
 
     test_results = engine.test(model=model, datamodule=datamodule)
@@ -70,7 +70,7 @@ def log_comparison_table(all_results: List[dict], project: str):
     """
     Logs a W&B table comparing the results of different models and categories.
     """
-    run = wandb.init(project=project, name="comparison_summary", job_type="eval")
+    wandb.init(project=project, name="comparison_summary", job_type="eval")
     
     table_data = wandb.Table(columns=["model", "category", "image_AUROC", "pixel_AUROC"])
     
@@ -138,7 +138,7 @@ def main():
 
             all_results.append(results)
             
-            summary_path = Path("experiments") / f"results_summary.json"
+            summary_path = Path("experiments") / "results_summary.json"
             with open(summary_path, "w") as f:
                 json.dump(all_results, f, indent=2, default=str)
 

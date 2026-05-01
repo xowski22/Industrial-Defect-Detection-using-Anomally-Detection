@@ -96,7 +96,7 @@ def train_ae(config: dict, category: str, exp_dir: Path):
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'loss': avg_loss,
-            }, ckpt_dir/  f"ae_epoch_{epoch+1}.pth")
+            }, ckpt_dir / f"ae_epoch_{epoch+1}.pth")
     
     print(f"{category} Evaluating...")
     results = eval_model(model, test_loader, device, method="mse")
