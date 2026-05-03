@@ -13,12 +13,17 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from src.data.dataset import MVTecDataset, get_default_transforms
 from src.models.ae import ConvAutoencoder
+from src.models.vae import ConvVAE, vae_loss
 from src.training.wandb_logger import log_ae_epoch, log_ae_eval, log_roc_curve, log_anomaly_vis, init_run
 from src.evaluation.metrics import eval_model, compute_anomaly_score
 
 def train_ae(config: dict, category: str, exp_dir: Path):
+    model_name = config.get("model", {}).get("name", "autoencoder").lower()
+    latent_dim = config.get("model", {}).get("latent_dim", 128)
+    eval_method = config.get("evaluation", {}).get("method", "mse")
+    gaussian_sigma = float(config.get("evaluation", {}).get("gaussian_sigma", 0.0))
 
-    init_run("autoencoder", category, config=config)
+    init_run(model_name, category, config=config)
     
     img_transform, mask_transforms = get_default_transforms(config['data']['img_size'])
 
@@ -55,8 +60,14 @@ def train_ae(config: dict, category: str, exp_dir: Path):
     )
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = ConvAutoencoder(latent_dim=128).to(device)
+    if model_name == "vae":
+        model = ConvVAE(latent_dim=latent_dim).to(device)
+    else:
+        model = ConvAutoencoder(latent_dim=latent_dim).to(device)
+
     num_epochs = config['training']['num_epochs']
+    vae_beta = float(config.get("model", {}).get("vae_beta", 1.0))
+    vae_recon_loss = config.get("model", {}).get("vae_recon_loss", "mse")
 
     optimizer = torch.optim.Adam(model.parameters(), lr=config['training']['learning_rate'])
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
@@ -74,8 +85,21 @@ def train_ae(config: dict, category: str, exp_dir: Path):
 
         for batch in tqdm(train_loader, desc=f"{category} Epoch {epoch+1}/{num_epochs}"):
             images = batch['image'].to(device)
-            reconstructed = model(images)
-            loss = criterion(reconstructed, images)
+            if model_name == "vae":
+                reconstructed, mu, logvar = model(images)
+                loss, recon_loss, kld_loss = vae_loss(
+                    reconstructed,
+                    images,
+                    mu,
+                    logvar,
+                    beta=vae_beta,
+                    recon_mode=vae_recon_loss,
+                )
+            else:
+                reconstructed = model(images)
+                loss = criterion(reconstructed, images)
+                recon_loss = loss
+                kld_loss = torch.tensor(0.0, device=device)
 
             optimizer.zero_grad()
             loss.backward()
@@ -84,6 +108,14 @@ def train_ae(config: dict, category: str, exp_dir: Path):
         
         avg_loss = epoch_loss / len(train_loader)
         log_ae_epoch(epoch, avg_loss, scheduler.get_last_lr()[0])
+        if model_name == "vae":
+            wandb.log(
+                {
+                    "train/recon_loss": float(recon_loss.detach().item()),
+                    "train/kld_loss": float(kld_loss.detach().item()),
+                    "epoch": epoch,
+                }
+            )
         scheduler.step()
 
         if avg_loss < best_loss:
@@ -99,7 +131,7 @@ def train_ae(config: dict, category: str, exp_dir: Path):
             }, ckpt_dir / f"ae_epoch_{epoch+1}.pth")
     
     print(f"{category} Evaluating...")
-    results = eval_model(model, test_loader, device, method="mse")
+    results = eval_model(model, test_loader, device, method=eval_method, gaussian_sigma=gaussian_sigma)
     log_ae_eval(results, category)
 
     model.eval()
@@ -109,8 +141,17 @@ def train_ae(config: dict, category: str, exp_dir: Path):
     with torch.no_grad():
         for batch in test_loader:
             images = batch['image'].to(device)
-            recon = model(images)
-            amaps = compute_anomaly_score(images, recon, method="mse")
+            if model_name == "vae":
+                recon, _, _ = model(images)
+            else:
+                recon = model(images)
+
+            amaps = compute_anomaly_score(
+                images,
+                recon,
+                method=eval_method,
+                gaussian_sigma=gaussian_sigma,
+            )
             scores = amaps.view(amaps.size(0), -1).max(dim=1)[0]
 
             all_labels.extend(batch['label'].cpu().numpy())
@@ -132,7 +173,12 @@ def train_ae(config: dict, category: str, exp_dir: Path):
     log_anomaly_vis(vis_imgs, vis_recons, vis_maps, sample_labels[:8], sample_types[:8], category)
 
     wandb.finish()
-    print(f"Finished training and evaluation for category '{category}'. Image AUROC: {results['image_AUROC']:.4f}, Pixel AUROC: {results['pixel_AUROC']:.4f}, F1 Score: {results['f1_score']:.4f}")
+    print(
+        f"Finished training and evaluation for category '{category}'. "
+        f"Image AUROC: {results['image_AUROC']:.4f}, "
+        f"Pixel AUROC: {results['pixel_AUROC']:.4f}, "
+        f"F1 Score: {results['f1_score']:.4f}"
+    )
 
     return results
 

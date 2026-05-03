@@ -216,3 +216,5 @@ experiments/*
 
 wandb
 results
+datasets
+pre_trained

@@ -53,7 +53,9 @@ def run_patchcore(config: dict, category: str, exp_dir: Path) -> dict:
 def run_autoencoder(config: dict, category: str, exp_dir: Path) -> dict:
     cfg = dict(config)
     cfg["data"] = dict(config["data"])
+    cfg["model"] = dict(config.get("model", {}))
     cfg["data"]["category"] = category
+    cfg["model"]["name"] = "autoencoder"
 
     results = train_ae(cfg, category, exp_dir)
     results["model"] = "autoencoder"
@@ -61,9 +63,65 @@ def run_autoencoder(config: dict, category: str, exp_dir: Path) -> dict:
 
     return results
 
+def run_vae(config: dict, category: str, exp_dir: Path) -> dict:
+    cfg = dict(config)
+    cfg["data"] = dict(config["data"])
+    cfg["model"] = dict(config.get("model", {}))
+    cfg["data"]["category"] = category
+    cfg["model"]["name"] = "vae"
+
+    results = train_ae(cfg, category, exp_dir)
+    results["model"] = "vae"
+    results["category"] = category
+
+    return results
+
+def run_efficientad(config: dict, category: str, exp_dir: Path) -> dict:
+    try:
+        from anomalib.models import EfficientAd
+    except ImportError:
+        from anomalib.models import EfficientAD as EfficientAd
+
+    configured_batch_size = int(config['training'].get('batch_size', 1))
+    train_batch_size = int(config.get('efficientad', {}).get('train_batch_size', 1))
+    eval_batch_size = int(config.get('efficientad', {}).get('eval_batch_size', configured_batch_size))
+
+    if train_batch_size != 1:
+        print(
+            f"[efficientad] Overriding train_batch_size={train_batch_size} to 1, "
+            "because EfficientAD requires train_batch_size=1."
+        )
+        train_batch_size = 1
+
+    datamodule = MVTecAD(
+        root=Path(config['data']['root_dir']),
+        category=category,
+        train_batch_size=train_batch_size,
+        eval_batch_size=eval_batch_size,
+        num_workers=config['training']['num_workers']
+    )
+
+    model = EfficientAd()
+
+    engine = build_anomalib_engine(exp_dir, "efficientad", category)
+    engine.fit(model=model, datamodule=datamodule)
+    test_results = engine.test(model=model, datamodule=datamodule)
+
+    results = {
+        "model": "efficientad",
+        "category": category,
+        "image_AUROC": test_results[0].get("image_AUROC", 0.0),
+        "pixel_AUROC": test_results[0].get("pixel_AUROC", 0.0),
+    }
+
+    wandb.finish()
+    return results
+
 MODEL_RUNNERS = {
     "autoencoder": run_autoencoder,
     "patchcore": run_patchcore,
+    "vae": run_vae,
+    "efficientad": run_efficientad,
 }
 
 def log_comparison_table(all_results: List[dict], project: str):

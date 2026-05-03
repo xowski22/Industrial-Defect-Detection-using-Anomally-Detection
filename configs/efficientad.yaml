@@ -4,22 +4,21 @@ data:
   img_size: 256
 
 model:
-  name: "autoencoder"
-  latent_dim: 128
-  vae_beta: 1.0
-  vae_recon_loss: "mse"
+  name: "efficientad"
 
 training:
-  batch_size: 16
+  batch_size: 1
   num_workers: 4
   learning_rate: 0.0001
-  num_epochs: 50
+  num_epochs: 1
+
+efficientad:
+  train_batch_size: 1
+  eval_batch_size: 32
 
 evaluation:
   metrics: ["auroc", "pixel_auroc"]
-  method: "ssim"
-  gaussian_sigma: 1.2
 
 output:
-  experiment_dir: "experiments/autoencoder"
+  experiment_dir: "experiments/efficientad"
   save_images: true

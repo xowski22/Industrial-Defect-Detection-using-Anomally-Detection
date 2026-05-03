@@ -12,6 +12,7 @@ from src.data.dataset import MVTecDataset, get_default_transforms
 from src.utils.visualization import plot_roc_curve, create_summary, visualize_results
 from src.evaluation.metrics import eval_model, compute_anomaly_score
 from src.models.ae import ConvAutoencoder
+from src.models.vae import ConvVAE
 
 def evaluate(config_path: str, checkpoint_path: Path, output_dir: Path):
     with open(config_path, 'r') as file:
@@ -44,7 +45,16 @@ def evaluate(config_path: str, checkpoint_path: Path, output_dir: Path):
     print(f"Test dataset size: {len(test_dataset)} images")
     print(f"Stats: {test_dataset.get_stats()}")
 
-    model = ConvAutoencoder(latent_dim=128).to(device)
+    model_name = config.get('model', {}).get('name', 'autoencoder').lower()
+    latent_dim = config.get('model', {}).get('latent_dim', 128)
+    eval_method = config.get('evaluation', {}).get('method', 'mse')
+    gaussian_sigma = float(config.get('evaluation', {}).get('gaussian_sigma', 0.0))
+
+    if model_name == 'vae':
+        model = ConvVAE(latent_dim=latent_dim).to(device)
+    else:
+        model = ConvAutoencoder(latent_dim=latent_dim).to(device)
+
     checkpoint = torch.load(checkpoint_path, map_location=device)
 
     if 'model_state_dict' in checkpoint:
@@ -55,7 +65,7 @@ def evaluate(config_path: str, checkpoint_path: Path, output_dir: Path):
     print(f"Loaded model from {checkpoint_path}")
 
     print("Evaluating model...")
-    results = eval_model(model, test_loader, device, method='mse')
+    results = eval_model(model, test_loader, device, method=eval_method, gaussian_sigma=gaussian_sigma)
 
     results_path = output_dir / "evaluation_results.json"
     with open(results_path, 'w') as f:
@@ -96,8 +106,14 @@ def evaluate(config_path: str, checkpoint_path: Path, output_dir: Path):
         masks = [s['mask'] for s in viz_samples]
 
         with torch.no_grad():
-            reconstructed = model(images)
-            anomaly_maps = compute_anomaly_score(images, reconstructed, method='mse')
+            model_output = model(images)
+            reconstructed = model_output[0] if isinstance(model_output, (tuple, list)) else model_output
+            anomaly_maps = compute_anomaly_score(
+                images,
+                reconstructed,
+                method=eval_method,
+                gaussian_sigma=gaussian_sigma,
+            )
 
             visualize_results(
                 images, reconstructed, anomaly_maps,
@@ -113,8 +129,14 @@ def evaluate(config_path: str, checkpoint_path: Path, output_dir: Path):
         for batch in test_loader:
             images = batch['image'].to(device)
 
-            reconstructed = model(images)
-            anomaly_maps = compute_anomaly_score(images, reconstructed, method='mse')
+            model_output = model(images)
+            reconstructed = model_output[0] if isinstance(model_output, (tuple, list)) else model_output
+            anomaly_maps = compute_anomaly_score(
+                images,
+                reconstructed,
+                method=eval_method,
+                gaussian_sigma=gaussian_sigma,
+            )
 
             image_scores = anomaly_maps.view(anomaly_maps.size(0), -1).max(dim=1)[0]
 
