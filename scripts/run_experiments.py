@@ -43,8 +43,8 @@ def run_patchcore(config: dict, category: str, exp_dir: Path) -> dict:
     results = {
         "model": "patchcore",
         "category": category,
-        "image_AUROC": test_results.get("image_AUROC", 0.0),
-        "pixel_AUROC": test_results.get("pixel_AUROC", 0.0),
+        "image_AUROC": test_results[0].get("image_AUROC", 0.0),
+        "pixel_AUROC": test_results[0].get("pixel_AUROC", 0.0),
     }
 
     wandb.finish()
