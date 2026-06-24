@@ -4,6 +4,15 @@ import torch.nn.functional as F
 from sklearn.metrics import roc_auc_score, roc_curve
 from typing import Tuple, Dict
 
+IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406])
+IMAGENET_STD = torch.tensor([0.229, 0.224, 0.225])
+
+def denormalize_batch(x: torch.Tensor) -> torch.Tensor:
+    """Denormalize a batch of images from ImageNet stats back to [0, 1]."""
+    mean = IMAGENET_MEAN.view(1, 3, 1, 1).to(x.device, x.dtype)
+    std = IMAGENET_STD.view(1, 3, 1, 1).to(x.device, x.dtype)
+    return (x * std + mean).clamp(0, 1)
+
 def compute_auroc(y_true: np.ndarray, y_scores: np.ndarray) -> float:
     """
     Compute the Area Under the Receiver Operating Characteristic Curve (AUROC).
@@ -138,7 +147,7 @@ def compute_anomaly_score(
     gaussian_sigma: float = 0.0,
 ) -> torch.Tensor:
     """
-    Commputer anomaly score from reconstruction error.
+    Compute anomaly score from reconstruction error.
 
     Args:
         original: Original images [B, C, H, W]
@@ -149,6 +158,9 @@ def compute_anomaly_score(
     Returns:
         Anomaly scores [B] (image-level) or [B, H, W] (pixel-level)
     """
+    original = denormalize_batch(original)
+    reconstructed = denormalize_batch(reconstructed)
+
     if method == 'mse':
         error = (original - reconstructed) ** 2
         # Average over channels
@@ -238,3 +250,69 @@ def eval_model(model, dataloader, device, method="mse", gaussian_sigma: float = 
         results['pixel_AUROC'] = float('nan')
     
     return results
+
+def eval_model_per_defect(
+    model, dataloader, device, method="mse", gaussian_sigma: float = 0.0
+) -> Tuple[Dict[str, float], Dict[str, Dict[str, float]]]:
+    """
+    Same as eval_model, but additionally breaks results down per defect_type.
+
+    Returns:
+        (overall_results, per_defect_results)
+        per_defect_results: {defect_type: {"n_samples", "image_AUROC",
+                                            "pixel_AUROC", "mean_defect_area"}}
+    """
+    model.eval()
+
+    all_labels, all_scores, all_defect_types = [], [], []
+    all_masks, all_anomaly_maps = [], []
+
+    with torch.no_grad():
+        for batch in dataloader:
+            images = batch['image'].to(device)
+            labels = batch['label'].cpu().numpy()
+            masks = batch['mask'].cpu().numpy()
+            defect_types = batch['defect_type']
+
+            model_output = model(images)
+            reconstructed = model_output[0] if isinstance(model_output, (tuple, list)) else model_output
+
+            error_maps = compute_anomaly_score(
+                images, reconstructed, method=method, gaussian_sigma=gaussian_sigma
+            )
+            image_scores = error_maps.view(error_maps.size(0), -1).max(dim=1)[0]
+
+            all_labels.extend(labels)
+            all_scores.extend(image_scores.cpu().numpy())
+            all_defect_types.extend(defect_types)
+
+            for i in range(len(labels)):
+                all_masks.append(masks[i].squeeze())
+                all_anomaly_maps.append(error_maps[i].cpu().numpy())
+
+    all_labels = np.array(all_labels)
+    all_scores = np.array(all_scores)
+    all_defect_types = np.array(all_defect_types, dtype=object)
+    all_masks = np.array(all_masks)
+    all_anomaly_maps = np.array(all_anomaly_maps)
+
+    overall = {
+        "image_AUROC": compute_auroc(all_labels, all_scores),
+        "pixel_AUROC": compute_pixel_auroc(all_masks, all_anomaly_maps),
+    }
+
+    good_mask = all_defect_types == "good"
+    per_defect = {}
+
+    for defect_type in sorted(set(all_defect_types) - {"good"}):
+        defect_mask = all_defect_types == defect_type
+        sel = defect_mask | good_mask  # this defect type + all normal samples
+
+        per_defect[defect_type] = {
+            "n_samples": int(defect_mask.sum()),
+            "image_AUROC": compute_auroc(all_labels[sel], all_scores[sel]),
+            "pixel_AUROC": compute_pixel_auroc(all_masks[sel], all_anomaly_maps[sel]),
+            "mean_defect_area": float(all_masks[defect_mask].mean()) if defect_mask.any() else float('nan'),
+        }
+
+    return overall, per_defect

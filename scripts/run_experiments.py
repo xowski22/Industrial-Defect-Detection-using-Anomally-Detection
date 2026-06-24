@@ -3,6 +3,7 @@ import yaml
 import argparse
 import json
 import pandas as pd
+import numpy as np
 
 from pathlib import Path
 from datetime import datetime
@@ -16,7 +17,7 @@ from anomalib.data import MVTecAD
 from anomalib.models import Patchcore
 from src.training.engine import build_anomalib_engine
 from scripts.train_ae import train_ae
-
+from src.evaluation.metrics import compute_auroc, compute_pixel_auroc
 
 
 
@@ -49,6 +50,88 @@ def run_patchcore(config: dict, category: str, exp_dir: Path) -> dict:
 
     wandb.finish()
     return results
+
+def run_patchcore_per_defect(config: dict, category: str, exp_dir: Path) -> dict:
+    """
+    Trains PatchCore and returns per-defect-type AUROC breakdown,
+    analogous to eval_model_per_defect for the autoencoder.
+    """
+    datamodule = MVTecAD(
+        root=Path(config['data']['root_dir']),
+        category=category,
+        train_batch_size=config['training']['batch_size'],
+        eval_batch_size=config['training']['batch_size'],
+        num_workers=config['training']['num_workers']
+    )
+
+    model = Patchcore(
+        backbone=config['model']['backbone'],
+        layers=["layer2", "layer3"],
+        num_neighbors=9
+    )
+
+    engine = build_anomalib_engine(exp_dir, "patchcore", category)
+    engine.fit(model=model, datamodule=datamodule)
+
+    predictions = engine.predict(model=model, datamodule=datamodule)
+
+    # Zbierz wszystko do jednego DataFrame
+    records = []
+    for batch in predictions:
+        scores = batch.pred_score.cpu().numpy()
+        labels = batch.gt_label.cpu().numpy()
+        paths = batch.image_path
+        gt_masks = batch.gt_mask.cpu().numpy()       # [B, H, W]
+        anomaly_maps = batch.anomaly_map.cpu().numpy()  # [B, H, W]
+
+        for i, path in enumerate(paths):
+            # Struktura MVTec: .../test/<defect_type>/<file>.png
+            defect_type = Path(path).parent.name
+            records.append({
+                "defect_type": defect_type,
+                "score": float(scores[i]),
+                "label": int(labels[i]),
+                "mask": gt_masks[i],
+                "anomaly_map": anomaly_maps[i],
+            })
+
+    df = pd.DataFrame(records)
+
+    overall = {
+        "model": "patchcore",
+        "category": category,
+        "image_AUROC": compute_auroc(df["label"].values, df["score"].values),
+        "pixel_AUROC": compute_pixel_auroc(
+            np.stack(df["mask"].values), np.stack(df["anomaly_map"].values)
+        ),
+    }
+
+    per_defect = {}
+    good_rows = df[df["defect_type"] == "good"]
+
+    for defect_type in sorted(set(df["defect_type"]) - {"good"}):
+        defect_rows = df[df["defect_type"] == defect_type]
+        sub = pd.concat([defect_rows, good_rows])
+
+        per_defect[defect_type] = {
+            "n_samples": int(len(defect_rows)),
+            "image_AUROC": compute_auroc(sub["label"].values, sub["score"].values),
+            "pixel_AUROC": compute_pixel_auroc(
+                np.stack(sub["mask"].values), np.stack(sub["anomaly_map"].values)
+            ),
+            "mean_defect_area": float(np.stack(defect_rows["mask"].values).mean()),
+        }
+
+    with open(exp_dir / "per_defect_results.json", "w") as f:
+        json.dump(per_defect, f, indent=2)
+
+    wandb.finish()
+    return overall, per_defect
+
+def run_patchcore_full(config: dict, category: str, exp_dir: Path) -> dict:
+    overall, per_defect = run_patchcore_per_defect(config, category, exp_dir)
+    overall["status"] = "ok"
+    return overall
 
 def run_autoencoder(config: dict, category: str, exp_dir: Path) -> dict:
     cfg = dict(config)
@@ -119,7 +202,7 @@ def run_efficientad(config: dict, category: str, exp_dir: Path) -> dict:
 
 MODEL_RUNNERS = {
     "autoencoder": run_autoencoder,
-    "patchcore": run_patchcore,
+    "patchcore": run_patchcore_full,
     "vae": run_vae,
     "efficientad": run_efficientad,
 }

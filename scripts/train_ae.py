@@ -1,4 +1,5 @@
 import sys
+from unicodedata import category
 import yaml
 from pathlib import Path
 from torch.utils.data import DataLoader
@@ -8,6 +9,7 @@ import argparse
 from datetime import datetime
 import numpy as np
 import wandb
+import json
 
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -15,7 +17,7 @@ from src.data.dataset import MVTecDataset, get_default_transforms
 from src.models.ae import ConvAutoencoder
 from src.models.vae import ConvVAE, vae_loss
 from src.training.wandb_logger import log_ae_epoch, log_ae_eval, log_roc_curve, log_anomaly_vis, init_run
-from src.evaluation.metrics import eval_model, compute_anomaly_score
+from src.evaluation.metrics import eval_model, compute_anomaly_score, eval_model_per_defect
 
 def train_ae(config: dict, category: str, exp_dir: Path):
     model_name = config.get("model", {}).get("name", "autoencoder").lower()
@@ -131,8 +133,12 @@ def train_ae(config: dict, category: str, exp_dir: Path):
             }, ckpt_dir / f"ae_epoch_{epoch+1}.pth")
     
     print(f"{category} Evaluating...")
-    results = eval_model(model, test_loader, device, method=eval_method, gaussian_sigma=gaussian_sigma)
+    results, per_defect_results = eval_model_per_defect(model, test_loader, device, method=eval_method, gaussian_sigma=gaussian_sigma)
     log_ae_eval(results, category)
+
+    per_defect_path = exp_dir / "per_defect_results.json"
+    with open(per_defect_path, "w") as f:
+        json.dump(per_defect_results, f, indent=2)
 
     model.eval()
     all_labels, all_scores = [], []
